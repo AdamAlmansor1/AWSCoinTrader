@@ -11,6 +11,9 @@ venv/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+*.zip
+build/
+lambda_layers/
 # Others
 .DS_Store
 .env
