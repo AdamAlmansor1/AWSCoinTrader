@@ -20,12 +20,15 @@ resource "aws_lambda_function" "crypto_emitter" {
   environment {
     variables = {
       QUEUE_URL = aws_sqs_queue.crypto_prices.id
+      COIN_GECKO_KEY = "CG-Q9GWKQeAyt2V9ftCpE9kt1fB"
     }
   }
 
   layers = [
     aws_lambda_layer_version.requests_layer.arn
   ]
+
+  source_code_hash = filebase64sha256("../build/emitter.zip")
 }
 
 # IAM Role for Lambda
