@@ -11,6 +11,7 @@ venv/
 *.tfstate
 *.tfstate.*
 terraform.tfvars
+*.auto.tfvars
 *.zip
 build/
 lambda_layers/
