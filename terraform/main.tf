@@ -19,8 +19,8 @@ resource "aws_lambda_function" "crypto_emitter" {
 
   environment {
     variables = {
-      QUEUE_URL = aws_sqs_queue.crypto_prices.id
-      COIN_GECKO_KEY = "CG-Q9GWKQeAyt2V9ftCpE9kt1fB"
+      QUEUE_URL      = aws_sqs_queue.crypto_prices.id
+      COIN_GECKO_KEY = var.COIN_GECKO_KEY
     }
   }
 
