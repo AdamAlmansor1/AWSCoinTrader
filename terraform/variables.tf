@@ -2,11 +2,19 @@ variable "region" {
   default = "ap-southeast-2"
 }
 
-variable "queue_name" {
-  default = "crypto-prices"
-}
-
-variable "COIN_GECKO_KEY" {
+variable "coin_gecko_key" {
   description = "API key for CoinGecko"
   type        = string
+}
+
+variable "database_name" {
+  default = "crypto_timestream_db"
+}
+
+variable "crypto_prices_table_name" {
+  default = "crypto_prices"
+}
+
+variable "trade_signals_table_name" {
+  default = "trade_signals"
 }
