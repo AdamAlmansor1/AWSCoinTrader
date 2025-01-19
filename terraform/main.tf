@@ -3,11 +3,6 @@ provider "aws" {
   region = var.region
 }
 
-# SQS Queue
-resource "aws_sqs_queue" "crypto_prices" {
-  name = var.queue_name
-}
-
 # Lambda Function
 resource "aws_lambda_function" "crypto_emitter" {
   filename         = "../build/emitter.zip"
@@ -19,8 +14,7 @@ resource "aws_lambda_function" "crypto_emitter" {
 
   environment {
     variables = {
-      QUEUE_URL      = aws_sqs_queue.crypto_prices.id
-      COIN_GECKO_KEY = var.COIN_GECKO_KEY
+      COIN_GECKO_KEY = var.coin_gecko_key
     }
   }
 
@@ -47,40 +41,6 @@ resource "aws_iam_role" "lambda_exec" {
       }
     ]
   })
-}
-
-# Custom IAM Policy for Lambda to Access SQS
-resource "aws_iam_policy" "lambda_sqs_policy" {
-  name        = "lambda-sqs-access-policy"
-  description = "Custom policy for Lambda to interact with SQS"
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "sqs:SendMessage",
-          "sqs:ReceiveMessage",
-          "sqs:DeleteMessage",
-          "sqs:GetQueueAttributes"
-        ],
-        Resource = aws_sqs_queue.crypto_prices.arn
-      }
-    ]
-  })
-}
-
-# Attach Custom IAM Policy to Lambda Role
-resource "aws_iam_role_policy_attachment" "lambda_custom_policy_attachment" {
-  role       = aws_iam_role.lambda_exec.name
-  policy_arn = aws_iam_policy.lambda_sqs_policy.arn
-}
-
-# Attach AWS-Managed Policy for Lambda SQS Execution
-resource "aws_iam_role_policy_attachment" "lambda_sqs_managed_policy" {
-  role       = aws_iam_role.lambda_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
 # EventBridge Rule for Scheduling
@@ -110,4 +70,51 @@ resource "aws_lambda_layer_version" "requests_layer" {
   layer_name       = "python-requests-layer"
   compatible_runtimes = ["python3.9"]
   source_code_hash = filebase64sha256("../build/python_modules.zip")
+}
+
+resource "aws_timestreamwrite_database" "crypto_timestream_db" {
+  database_name = "crypto_timestream_db"
+
+  tags = {
+    Environment = "Production"
+    Project     = "CryptoAnalytics"
+  }
+}
+
+resource "aws_timestreamwrite_table" "crypto_prices" {
+  database_name = aws_timestreamwrite_database.crypto_timestream_db.database_name
+  table_name    = "crypto_prices"
+
+  retention_properties {
+    memory_store_retention_period_in_hours = 24  # Retain data in-memory for 24 hours
+    magnetic_store_retention_period_in_days = 30 # Retain data on disk for 30 days
+  }
+
+  tags = {
+    Environment = "Production"
+    Project     = "CryptoAnalytics"
+  }
+}
+
+resource "aws_iam_policy" "timestream_policy" {
+    name        = "TimestreamAccessPolicy"
+    description = "Policy for accessing Timestream from Lambda"
+    policy      = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+            {
+                Effect = "Allow"
+                Action = [
+                    "timestream:WriteRecords",
+                    "timestream:DescribeEndpoints"
+                ]
+                Resource = "*"
+            }
+        ]
+    })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_timestream_policy" {
+    role       = aws_iam_role.lambda_exec.name
+    policy_arn = aws_iam_policy.timestream_policy.arn
 }

@@ -14,7 +14,7 @@ terraform.tfvars
 *.auto.tfvars
 *.zip
 build/
-lambda_layers/
+lambda-layer/
 # Others
 .DS_Store
 .env
