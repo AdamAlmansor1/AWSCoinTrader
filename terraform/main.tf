@@ -14,7 +14,7 @@ resource "aws_lambda_function" "crypto_emitter" {
 
   environment {
     variables = {
-      COIN_GECKO_KEY = var.coin_gecko_key
+      coin_gecko_key = var.coin_gecko_key
     }
   }
 
@@ -43,10 +43,37 @@ resource "aws_iam_role" "lambda_exec" {
   })
 }
 
+# IAM Policy for Logging
+resource "aws_iam_policy" "lambda_logging" {
+  name        = "lambda_logging_policy"
+  description = "Allows Lambda to write logs to CloudWatch"
+  
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Effect   = "Allow",
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+# Attach Logging Policy to Lambda Role
+resource "aws_iam_role_policy_attachment" "lambda_logging_attach" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.lambda_logging.arn
+}
+
 # EventBridge Rule for Scheduling
 resource "aws_cloudwatch_event_rule" "lambda_schedule" {
   name                = "crypto-emitter-schedule"
-  schedule_expression = "rate(1 minute)"
+  schedule_expression = "rate(5 minutes)"
 }
 
 # EventBridge Target for Lambda

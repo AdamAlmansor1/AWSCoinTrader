@@ -46,6 +46,7 @@ def lambda_handler(event, context):
             Records=records
         )
 
+        print(f"Timestream write response: {response}")
         return {"statusCode": 200, "body": "Data written to Timestream"}
     
     except requests.exceptions.RequestException as e:
