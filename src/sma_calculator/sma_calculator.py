@@ -7,25 +7,25 @@ database_name = "crypto_timestream_db"
 price_table_name = "crypto_prices"
 sma_table_name = "sma_indicators"
 
-short_window = 10
-long_window = 30
+short_window = 3
+long_window = 6
 
 def calculate_sma(coin, window):
     timestream_client = boto3.client("timestream-query")
 
     query = f"""
-    WITH last_prices AS (
-        SELECT time, coin_name, measure_value::double
-        FROM "{database_name}"."{price_table_name}"
-        WHERE coin_name = '{coin}'
-        AND time BETWEEN ago({5 * window}m) AND now()
-    )
-    SELECT 
-        MAX(time) AS time,
+    SELECT
+        NOW() AS time,
         coin_name,
-        AVG(measure_value::double) AS sma_{window}
-    FROM last_prices
-    GROUP BY coin_name
+        AVG(measure_value::double) OVER (
+            PARTITION BY coin_name
+            ORDER BY time
+            ROWS BETWEEN {window} PRECEDING AND CURRENT ROW
+        ) AS sma_{window}
+    FROM "{database_name}"."{price_table_name}"
+    WHERE coin_name = '{coin}'
+        AND time BETWEEN ago({window * 10}m) AND now()
+    LIMIT 1
     """
 
     try:
@@ -53,7 +53,7 @@ def write_to_timestream(records, table_name_target):
         print("Write Error:", str(e))
 
 def lambda_handler(event, context):
-    coins = ["bitcoin", "ethereum"]
+    coins = ["bitcoin"]
     timestream_records = []
     timestamp = str(int(datetime.utcnow().timestamp() * 1e3))
     

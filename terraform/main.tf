@@ -73,7 +73,7 @@ resource "aws_iam_role_policy_attachment" "lambda_logging_attach" {
 # EventBridge Rule for Scheduling
 resource "aws_cloudwatch_event_rule" "lambda_schedule" {
   name                = "crypto-emitter-schedule"
-  schedule_expression = "rate(5 minutes)"
+  schedule_expression = "rate(10 minutes)"
 }
 
 # EventBridge Target for Lambda
@@ -186,7 +186,7 @@ resource "aws_lambda_function" "sma_calculator" {
 # Run every 5 minutes
 resource "aws_cloudwatch_event_rule" "sma_schedule" {
   name                = "sma-calculation-schedule"
-  schedule_expression = "rate(5 minutes)"
+  schedule_expression = "rate(20 minutes)"
 }
 
 resource "aws_cloudwatch_event_target" "sma_target" {
@@ -227,4 +227,79 @@ resource "aws_iam_policy" "timestream_full_access" {
 resource "aws_iam_role_policy_attachment" "lambda_timestream_full_access" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = aws_iam_policy.timestream_full_access.arn
+}
+
+resource "aws_s3_bucket" "trade_states" {
+  bucket = "trade-states-bucket"
+}
+
+resource "aws_iam_policy" "s3_access" {
+  name        = "S3AccessPolicy"
+  description = "Allows Lambda to read/write to S3"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ],
+        Resource = "${aws_s3_bucket.trade_states.arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_s3_policy" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.s3_access.arn
+}
+
+# Lambda Function: Trade Executor
+resource "aws_lambda_function" "trade_executor" {
+  filename         = "../build/trade_executor.zip"
+  function_name    = "trade_executor"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "trade_executor.lambda_handler"
+  runtime          = "python3.9"
+  timeout          = 300
+  memory_size      = 512
+
+  environment {
+    variables = {
+      TIMESTREAM_DB   = "crypto_db"
+      RAW_TABLE       = "prices"
+      PROCESSED_TABLE = "sma_indicators"
+      trade_states_bucket = var.trade_states_bucket
+    }
+  }
+
+  layers = [
+    aws_lambda_layer_version.requests_layer.arn
+  ]
+
+  source_code_hash = filebase64sha256("../build/trade_executor.zip")
+}
+
+# CloudWatch Event Rule to run trade_executor every 5 minutes
+resource "aws_cloudwatch_event_rule" "trade_schedule" {
+  name                = "trade_execution-schedule"
+  schedule_expression = "rate(20 minutes)"
+}
+
+# CloudWatch Event Target linking the event rule to the trade_executor Lambda
+resource "aws_cloudwatch_event_target" "trade_target" {
+  rule = aws_cloudwatch_event_rule.trade_schedule.name
+  arn  = aws_lambda_function.trade_executor.arn
+}
+
+# Lambda Permission to allow CloudWatch Events to invoke the trade_executor Lambda
+resource "aws_lambda_permission" "allow_trade_cloudwatch" {
+  statement_id  = "AllowTradeExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.trade_executor.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.trade_schedule.arn
 }
