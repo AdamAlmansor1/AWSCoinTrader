@@ -15,7 +15,7 @@ table_name = "crypto_prices"
 
 def lambda_handler(event, context):
     api_url = f"https://api.coingecko.com/api/v3/simple/price?x_cg_demo_api_key={coin_gecko_key}"
-    params = {"ids": "bitcoin,ethereum", "vs_currencies": "aud"}
+    params = {"ids": "bitcoin", "vs_currencies": "aud"}
 
     try:
         # Fetch cryptocurrency prices

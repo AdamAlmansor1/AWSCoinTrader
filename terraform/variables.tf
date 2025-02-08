@@ -18,3 +18,7 @@ variable "crypto_prices_table_name" {
 variable "trade_signals_table_name" {
   default = "trade_signals"
 }
+
+variable "trade_states_bucket" {
+  default = "trade-states-bucket"
+}
