@@ -303,3 +303,66 @@ resource "aws_lambda_permission" "allow_trade_cloudwatch" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.trade_schedule.arn
 }
+
+resource "aws_lambda_function" "budget_reporter" {
+  filename         = "../build/budget_reporter.zip"
+  function_name    = "budget_reporter"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "budget_reporter.lambda_handler"
+  runtime          = "python3.9"
+  timeout          = 30
+  memory_size      = 128
+
+  environment {
+    variables = {
+      trade_states_bucket = var.trade_states_bucket
+    }
+  }
+
+  layers = [
+    aws_lambda_layer_version.requests_layer.arn
+  ]
+
+  source_code_hash = filebase64sha256("../build/budget_reporter.zip")
+}
+
+resource "aws_api_gateway_rest_api" "budget_api" {
+  name        = "BudgetAPI"
+  description = "API for retrieving budget/trade state"
+}
+
+resource "aws_api_gateway_resource" "budget" {
+  rest_api_id = aws_api_gateway_rest_api.budget_api.id
+  parent_id   = aws_api_gateway_rest_api.budget_api.root_resource_id
+  path_part   = "budget"
+}
+
+resource "aws_api_gateway_method" "get_budget" {
+  rest_api_id   = aws_api_gateway_rest_api.budget_api.id
+  resource_id   = aws_api_gateway_resource.budget.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "budget_integration" {
+  rest_api_id = aws_api_gateway_rest_api.budget_api.id
+  resource_id = aws_api_gateway_resource.budget.id
+  http_method = aws_api_gateway_method.get_budget.http_method
+  type        = "AWS_PROXY"
+  integration_http_method = "POST"
+  uri         = aws_lambda_function.budget_reporter.invoke_arn
+}
+
+# Permission for API Gateway to invoke Lambda
+resource "aws_lambda_permission" "budget_api_permission" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.budget_reporter.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.budget_api.execution_arn}/*/*"
+}
+
+resource "aws_api_gateway_deployment" "budget_deployment" {
+  depends_on = [aws_api_gateway_integration.budget_integration]
+  rest_api_id = aws_api_gateway_rest_api.budget_api.id
+}
