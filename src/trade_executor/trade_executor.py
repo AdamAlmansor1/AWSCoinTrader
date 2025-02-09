@@ -70,7 +70,7 @@ def query_smas(coin):
         SELECT time, coin_name, measure_name, measure_value::double AS sma
         FROM "{database_name}"."{sma_table_name}"
         WHERE coin_name = '{coin}'
-            AND time BETWEEN ago(20m) AND now()
+            AND time BETWEEN ago(40m) AND now()
         ORDER BY time DESC
     )
     LIMIT 4
@@ -104,8 +104,10 @@ def generate_signal(sma_data):
         print(f"Prev Long: {prev_long}, Curr Long: {curr_long}")
         
         if prev_short < prev_long and curr_short > curr_long:
+            print('golden_cross')
             return 'golden_cross'
         elif prev_short > prev_long and curr_short < curr_long:
+            print('death_cross')
             return 'death_cross'
         else:
             return 'no_signal'
@@ -128,6 +130,7 @@ def lambda_handler(event, context):
 
         # If there's no valid signal, skip this coin
         if not signal:
+            print("No valid signal.")
             continue
 
         try:
@@ -138,21 +141,21 @@ def lambda_handler(event, context):
 
         # Process a buy signal if not currently holding
         if signal == 'golden_cross' and not state.get('holding', False):
-            if balance >= price:
+            if balance >= price * 0.0005:
                 state['holding'] = True
-                state['entry_price'] = price
-                balance -= price
+                state['entry_price'] = price * 0.0005
+                balance -= price * 0.0005
                 update_state(coin, state)
-                print(f"Bought {coin} at {price}")
+                print(f"Bought {coin} at {price * 0.0005}")
 
         # Process a sell signal if currently holding
         elif signal == 'death_cross' and state.get('holding', False):
-            pnl = price - state['entry_price']
-            balance += price
+            pnl = (price * 0.0005) - state['entry_price']
+            balance += price * 0.0005
             state['holding'] = False
             state['entry_price'] = 0
             update_state(coin, state)
-            print(f"Sold {coin} at {price}. P&L: {pnl:.2f}")
+            print(f"Sold {coin} at {price * 0.0005}. P&L: {pnl:.2f}")
 
     update_balance(balance)
 
